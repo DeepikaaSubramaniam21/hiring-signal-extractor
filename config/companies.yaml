@@ -1,0 +1,43 @@
+greenhouse:
+  # Tech
+  - stripe
+  - datadog
+  - mongodb
+  - elastic
+  - airbnb
+  - databricks
+  # Health tech - verified slugs
+  - doximity
+  - zocdoc
+  - natera
+  - flatironhealth
+  - oscar
+  - komodohealth
+  - carbon
+  - suki
+  - twinhealth
+  # Not on Greenhouse (Workday/custom) - kept for reference, will skip cleanly
+  - google
+  - microsoft
+  - nvidia
+  - oracle
+  - salesforce
+  - adobe
+  - servicenow
+  - snowflake
+  - uber
+  - square
+  - tempus
+  - devotedhealthcare
+  - cedar
+  - abridge
+  - hippocraticai
+  - akasa
+  - vizai
+  - particlehealth
+  - redox
+
+lever:
+  # Verified slugs
+  - palantir
+  - redoxengine

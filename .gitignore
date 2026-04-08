@@ -1,0 +1,23 @@
+# Generated data — recreated on every pipeline run
+data/jobs.db
+data/minhash_index.pkl
+data/adzuna_budget.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+
+# Env / secrets
+.env
+*.env
+
+# IDE
+.idea/
+.vscode/
+*.swp

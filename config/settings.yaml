@@ -1,0 +1,45 @@
+source_weights:
+  greenhouse: 1.0
+  lever: 1.0
+  wwr: 0.9
+  adzuna: 0.6
+
+ghost_thresholds:
+  max_age_days: 60
+
+target_roles:
+  - engineering manager
+  - senior engineering manager
+  - director of engineering
+
+adzuna:
+  api_id: "738af738"
+  api_key: "39fbe428bcc61e9df407b5237d09a81c"
+  daily_request_budget: 250
+
+scoring:
+  freshness_half_life_days: 14
+
+skills:
+  - python
+  - rust
+  - go
+  - typescript
+  - javascript
+  - react
+  - kubernetes
+  - docker
+  - aws
+  - gcp
+  - azure
+  - postgresql
+  - redis
+  - kafka
+  - spark
+  - pytorch
+  - tensorflow
+  - llm
+  - sql
+  - dbt
+  - airflow
+  - terraform
