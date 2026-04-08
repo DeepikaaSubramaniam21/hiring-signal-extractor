@@ -13,8 +13,8 @@ target_roles:
   - director of engineering
 
 adzuna:
-  api_id: "738af738"
-  api_key: "39fbe428bcc61e9df407b5237d09a81c"
+  api_id: ""   # get a free key at developer.adzuna.com
+  api_key: ""
   daily_request_budget: 250
 
 scoring:
