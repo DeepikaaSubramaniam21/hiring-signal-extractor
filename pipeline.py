@@ -53,7 +53,7 @@ def run_pipeline() -> None:
         GreenhouseIngestor(companies=companies.get("greenhouse", [])),
         LeverIngestor(companies=companies.get("lever", [])),
         WWRIngestor(),
-        AdzunaIngestor(settings=settings["adzuna"]),
+        AdzunaIngestor(settings=settings["adzuna"], target_roles=settings.get("target_roles", [])),
     ]
 
     dedup = Deduplicator()

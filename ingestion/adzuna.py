@@ -27,10 +27,11 @@ def _save_budget(budget: dict) -> None:
 
 
 class AdzunaIngestor(BaseIngestor):
-    def __init__(self, settings: dict):
+    def __init__(self, settings: dict, target_roles: list[str] | None = None):
         self.api_id = settings["api_id"]
         self.api_key = settings["api_key"]
-        self.roles = settings.get("roles", [])
+        # target_roles from top-level settings takes precedence over legacy adzuna.roles
+        self.roles = target_roles or settings.get("roles", [])
         self.daily_limit = settings.get("daily_request_budget", 250)
         self.session = requests.Session()
         self.session.headers["User-Agent"] = "hiring-signal-extractor/1.0"
