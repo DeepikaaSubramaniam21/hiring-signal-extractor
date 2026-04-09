@@ -52,6 +52,55 @@ def load_trends(week_start: str, dimension: str, min_signal: float) -> pd.DataFr
 
 
 @st.cache_data(ttl=300)
+def load_trend_history(dimension: str, top_values: list[str]) -> pd.DataFrame:
+    """Load week-over-week signal history for a set of dimension values."""
+    if not top_values:
+        return pd.DataFrame()
+    conn = get_connection()
+    placeholders = ",".join("?" * len(top_values))
+    return pd.read_sql_query(
+        f"""
+        SELECT week_start, dimension_value, signal_units, job_count
+        FROM weekly_trends
+        WHERE dimension = ? AND dimension_value IN ({placeholders})
+        ORDER BY week_start ASC
+        """,
+        conn,
+        params=[dimension, *top_values],
+    )
+
+
+@st.cache_data(ttl=300)
+def load_wow_delta(dimension: str, week_start: str) -> pd.DataFrame:
+    """Week-over-week change for the current week vs previous week."""
+    conn = get_connection()
+    weeks = conn.execute(
+        "SELECT DISTINCT week_start FROM weekly_trends ORDER BY week_start DESC LIMIT 2"
+    ).fetchall()
+    if len(weeks) < 2:
+        return pd.DataFrame()
+    current_week, prev_week = weeks[0]["week_start"], weeks[1]["week_start"]
+    return pd.read_sql_query(
+        """
+        SELECT c.dimension_value,
+               c.signal_units AS current_signal,
+               COALESCE(p.signal_units, 0) AS prev_signal,
+               ROUND((c.signal_units - COALESCE(p.signal_units, 0))
+                     / MAX(COALESCE(p.signal_units, 0.001), 0.001) * 100, 1) AS pct_change,
+               c.job_count AS current_jobs
+        FROM weekly_trends c
+        LEFT JOIN weekly_trends p
+          ON p.dimension_value = c.dimension_value AND p.dimension = c.dimension
+          AND p.week_start = ?
+        WHERE c.dimension = ? AND c.week_start = ?
+        ORDER BY pct_change DESC
+        """,
+        conn,
+        params=[prev_week, dimension, current_week],
+    )
+
+
+@st.cache_data(ttl=300)
 def load_ghost_jobs() -> pd.DataFrame:
     conn = get_connection()
     return pd.read_sql_query(
@@ -175,6 +224,57 @@ else:
     )
     fig.update_layout(yaxis={"categoryorder": "total ascending"}, height=max(400, top_n * 22))
     st.plotly_chart(fig, width="stretch")
+
+# ── Week-over-week delta ──────────────────────────────────────────────────────
+weeks_available = load_weeks()
+if len(weeks_available) >= 2:
+    st.subheader(f"📈 Week-over-Week Change — {dimension.title()}")
+    wow = load_wow_delta(dimension, week_start)
+    if not wow.empty:
+        wow["delta_label"] = wow["pct_change"].apply(
+            lambda x: f"+{x:.0f}%" if x >= 0 else f"{x:.0f}%"
+        )
+        fig_wow = px.bar(
+            wow.head(top_n),
+            x="pct_change",
+            y="dimension_value",
+            orientation="h",
+            color="pct_change",
+            color_continuous_scale="RdYlGn",
+            range_color=[-100, 100],
+            text="delta_label",
+            labels={"dimension_value": dimension.title(), "pct_change": "WoW Change (%)"},
+        )
+        fig_wow.update_layout(
+            yaxis={"categoryorder": "total ascending"},
+            height=max(400, top_n * 22),
+            coloraxis_showscale=False,
+        )
+        fig_wow.update_traces(textposition="outside")
+        st.plotly_chart(fig_wow, width="stretch")
+
+# ── Historical trend lines ────────────────────────────────────────────────────
+if len(weeks_available) >= 2:
+    st.subheader(f"📉 Signal History — Top {min(top_n, 10)} {dimension.title()}s")
+    top_values = trends["dimension_value"].head(10).tolist() if not trends.empty else []
+    history = load_trend_history(dimension, top_values)
+    if not history.empty and history["week_start"].nunique() >= 2:
+        fig_hist = px.line(
+            history,
+            x="week_start",
+            y="signal_units",
+            color="dimension_value",
+            markers=True,
+            labels={
+                "week_start": "Week",
+                "signal_units": "Signal Units",
+                "dimension_value": dimension.title(),
+            },
+        )
+        fig_hist.update_layout(height=400, xaxis_title="Week of")
+        st.plotly_chart(fig_hist, width="stretch")
+    else:
+        st.info("Run the pipeline again next week to see trend history.")
 
 # ── Skill heatmap ─────────────────────────────────────────────────────────────
 if dimension == "skill":

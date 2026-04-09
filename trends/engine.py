@@ -30,6 +30,13 @@ def compute_weekly_trends(conn, settings: dict, week_start: str | None = None) -
     skill_list = settings.get("skills", [])
     target_roles = settings.get("target_roles", [])
 
+    # Delete and recompute this week's trends so re-runs are idempotent.
+    # Historical weeks (week_start < current) are never touched.
+    conn.execute(
+        "DELETE FROM weekly_trends WHERE week_start = ?", (week_start,)
+    )
+    conn.commit()
+
     rows = conn.execute(
         """
         SELECT c.id, c.normalized_title, c.location, c.is_ghost,
@@ -39,23 +46,21 @@ def compute_weekly_trends(conn, settings: dict, week_start: str | None = None) -
         LEFT JOIN raw_to_canonical rc ON rc.canonical_id = c.id
         LEFT JOIN raw_jobs r ON r.id = rc.raw_id
         WHERE c.is_ghost = 0
-        ORDER BY c.id, s.scored_at DESC
+          AND s.id = (
+              SELECT id FROM signal_scores
+              WHERE canonical_id = c.id
+              ORDER BY scored_at DESC
+              LIMIT 1
+          )
+        ORDER BY c.id
         """
     ).fetchall()
 
-    # Keep only the latest score per canonical job
-    seen = set()
-    unique_rows = []
-    for row in rows:
-        if row["id"] not in seen:
-            seen.add(row["id"])
-            unique_rows.append(row)
-
     # Filter to target roles
-    unique_rows = [r for r in unique_rows if _matches_target_roles(r["normalized_title"], target_roles)]
+    rows = [r for r in rows if _matches_target_roles(r["normalized_title"], target_roles)]
 
     count = 0
-    for row in unique_rows:
+    for row in rows:
         score = row["final_score"]
 
         # Role dimension

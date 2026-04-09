@@ -1,3 +1,4 @@
+import argparse
 import os
 from pathlib import Path
 
@@ -22,7 +23,9 @@ from storage.db import (
     link_raw_to_canonical,
     upsert_canonical_job,
     upsert_raw_job,
+    DB_PATH,
 )
+from processing.deduplicator import LSH_INDEX_PATH
 from trends.engine import compute_weekly_trends
 
 CONFIG_DIR = Path(__file__).parent / "config"
@@ -34,24 +37,24 @@ def load_config() -> tuple[dict, dict]:
     return settings, companies
 
 
-def run_pipeline() -> None:
+def run_pipeline(fresh: bool = False) -> None:
     settings, companies = load_config()
 
-    # Drop and recreate DB + MinHash index on every run for a clean slate
-    from storage.db import DB_PATH
-    from processing.deduplicator import LSH_INDEX_PATH
-    for path in [DB_PATH, LSH_INDEX_PATH]:
-        if path.exists():
-            path.unlink()
-    print("[pipeline] Dropped existing database and dedup index")
+    if fresh:
+        # Wipe everything and start from scratch
+        for path in [DB_PATH, LSH_INDEX_PATH]:
+            if path.exists():
+                path.unlink()
+        print("[pipeline] --fresh: dropped existing database and dedup index")
+    else:
+        print("[pipeline] Persistent mode: accumulating into existing database")
 
     conn = get_connection()
-    execute_schema(conn)
-    print(f"[pipeline] Fresh database created")
+    execute_schema(conn)  # no-op if tables already exist
 
     ingestors = [
-        GreenhouseIngestor(companies=companies.get("greenhouse", [])),
-        LeverIngestor(companies=companies.get("lever", [])),
+        GreenhouseIngestor(companies=companies.get("greenhouse") or []),
+        LeverIngestor(companies=companies.get("lever") or []),
         WWRIngestor(),
         AdzunaIngestor(settings=settings["adzuna"], target_roles=settings.get("target_roles", [])),
     ]
@@ -60,6 +63,9 @@ def run_pipeline() -> None:
 
     total_raw = 0
     total_new_canonical = 0
+    total_updated_canonical = 0
+
+    from ingestion.base import utcnow_iso
 
     for ingestor in ingestors:
         source_name = type(ingestor).__name__
@@ -83,7 +89,6 @@ def run_pipeline() -> None:
             if near_dup:
                 fingerprint = near_dup  # redirect to existing canonical
 
-            from ingestion.base import utcnow_iso
             canonical_dict = {
                 "fingerprint": fingerprint,
                 "company": raw_job.company,
@@ -101,8 +106,13 @@ def run_pipeline() -> None:
             if is_new:
                 dedup.register(fingerprint, raw_job.jd_text)
                 total_new_canonical += 1
+            else:
+                total_updated_canonical += 1
 
-    print(f"[pipeline] Ingested {total_raw} raw jobs -> {total_new_canonical} new canonical jobs")
+    print(
+        f"[pipeline] Ingested {total_raw} raw jobs -> "
+        f"{total_new_canonical} new canonical, {total_updated_canonical} updated"
+    )
 
     print("[pipeline] Running ghost filter...")
     flagged = run_ghost_filter(conn, settings)
@@ -124,4 +134,11 @@ def run_pipeline() -> None:
 
 
 if __name__ == "__main__":
-    run_pipeline()
+    parser = argparse.ArgumentParser(description="Hiring signal pipeline")
+    parser.add_argument(
+        "--fresh",
+        action="store_true",
+        help="Drop and recreate the database before running (default: accumulate)",
+    )
+    args = parser.parse_args()
+    run_pipeline(fresh=args.fresh)
